@@ -39,6 +39,58 @@ jobs:
           gradle-version: 8.9
 
       - name: Extract Android project
+      
+      - name: Fix Kotlin source errors
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          src = Path("extracted/KasirRumahKopi/app/src/main/java/com/rumahkopi/kasir/MainActivity.kt")
+          text = src.read_text()
+
+          # Fix verticalScroll import
+          if "import androidx.compose.foundation.verticalScroll" not in text:
+              text = text.replace(
+                  "import androidx.compose.foundation.rememberScrollState",
+                  "import androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.verticalScroll"
+              )
+
+          # Fix settings state delegate
+          text = text.replace(
+              "var edit by remember{name}",
+              "var edit by remember { mutableStateOf(name) }"
+          )
+
+          # Replace problematic HistoryScreen implementation
+          history = '''@Composable private fun HistoryScreen(tx: List<Transaction>, onReceipt: (Transaction) -> Unit) {
+              LazyColumn(Modifier.fillMaxSize().padding(12.dp)) {
+                  items(tx) { t ->
+                      ListItem(
+                          modifier = Modifier.clickable { onReceipt(t) },
+                          headlineContent = { Text(dateText(t.date)) },
+                          supportingContent = {
+                              Text("${t.items.sumOf { it.qty }} item • ${t.method} • ID ${t.id.take(8)}")
+                          },
+                          trailingContent = {
+                              Text(rupiah(t.total), fontWeight = FontWeight.Bold, color = Coffee)
+                          }
+                      )
+                  }
+              }
+          }'''
+
+          text = re.sub(
+              r'@Composable private fun HistoryScreen.*',
+              history,
+              text,
+              count=1
+          )
+
+          src.write_text(text)
+          print("Kotlin source fixes applied.")
+          PY
+
         run: |
           ZIP_FILE=$(find . -maxdepth 1 -name '*.zip' -print -quit)
           unzip -q "$ZIP_FILE" -d extracted
